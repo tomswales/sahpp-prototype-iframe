@@ -1,0 +1,26 @@
+
+
+.submit-button {
+		background: #66cc66 !important;
+		width: 100%  !important;
+		background-image: none  !important;
+		min-height: 45px;
+}
+
+header {
+	background: #66cc66 !important;
+	color: white  !important;
+}
+
+
+.shop-logo {
+	background-image: url("optile_logo.png")  !important;
+}
+
+#shop-title {
+	color: white  !important;
+}
+
+.payment-total-container {
+	color: #66cc66 !important;
+}

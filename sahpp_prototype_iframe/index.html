@@ -1,0 +1,579 @@
+<! THIS IS A FUNCTIONAL PROTOTYPE FOR DEMO PURPOSES ONLY >
+
+<!DOCTYPE html>
+<html>
+<head id="css-target">
+	<meta name="viewport" content="width=device-width">
+	<title>Pay with Payoneer</title>
+	<link rel="shortcut icon" type="image/x-icon" href="https://www.payoneer.com/wp-content/uploads/index.ico"/>
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400&display=swap" rel="stylesheet">
+</head>
+
+<body>
+	<header>
+		<div class="logo-container">
+			<div class="shop-logo"></div>
+		</div>
+		<h2 id="shop-title">optile e-shop</h2>
+	</header>
+	<main id="content-container">
+	</main>
+	<footer>
+		<p>Powered by</p>
+		<img class="logo" src="https://www.payoneer.com/wp-content/uploads/payoneer-light-logo.svg"></img>
+	</footer>
+</body>
+
+<script>
+
+	// Get the exact URL for the payment page
+	const url = new URL(window.location.href);
+
+	// Parse the listId for the payment session
+	const listId = url.searchParams?.get("listId");
+	// See if some custom CSS needs to be applied
+	const cssLink = url.searchParams?.get("cssUrl");
+
+	// If custom css link was provided, apply the custom stylesheet
+	if (cssLink) {
+		const cssElement = document.createElement("link");
+		cssElement.setAttribute("rel", "stylesheet");
+		cssElement.setAttribute("href", cssLink);
+		const head = document.getElementById("css-target");
+		head.appendChild(cssElement);
+
+	}
+
+	// If list ID was provided, fetch data about the shop, products, etc. from Client API LIST endpoint
+	if (listId) {
+
+		const req = `https://api.integration.oscato.com/pci/v1/${listId}`
+
+		fetch(req)
+		.then(response => {
+			if(!response.ok) {
+				throw new Error(response.status + ": Your payment session is invalid or has expired")
+			}
+			else {
+				return response.json()
+			}	
+		})
+		.then(result => {
+			console.log(result);
+
+			if(result.links?.lang) {
+				console.log(result.links?.lang)
+			}
+
+			const shopDataContainer = ShopDataContainer(result);
+
+			const iFrameContainer = PaymentIframeContainer(result);
+			
+			document.getElementById("content-container").appendChild(shopDataContainer)
+
+			document.getElementById("content-container").appendChild(iFrameContainer)
+			
+
+		}).catch(e => {
+			const errorMessage = ErrorMessage(e.message);
+			document.getElementById("content-container").appendChild(errorMessage)
+		});
+
+
+	}
+	else {
+		const errorMessage = ErrorMessage("<b>Error: no list id provided</b>");
+		document.getElementById("content-container").appendChild(errorMessage)
+		
+	}
+
+	/*
+		Error message component
+	*/
+
+	function ErrorMessage (errorMessageText) {
+		const errorMessage = document.createElement("div");
+		errorMessage.setAttribute("class", "error-message");
+		const errorText = document.createElement("h3")
+		errorText.innerHTML = errorMessageText;
+		errorMessage.appendChild(errorText);
+		return errorMessage;
+	}
+
+	/*
+		Product and payment data component	
+	*/
+
+	function ShopDataContainer(responseData) {
+
+		const shopDataContainer = document.createElement("div")
+		shopDataContainer.setAttribute("id", "shop-data-container");
+
+		const shopDataTitle = ShopDataTitle("Ihre Bestellung")
+
+		shopDataContainer.appendChild(shopDataTitle)
+		
+		// If there is a reference in the payment details, it is shown here
+		if(responseData?.payment?.reference) {
+			const orderReference = OrderReference("Bestellbezug", responseData?.payment?.reference);
+			shopDataContainer.appendChild(orderReference)
+		}
+
+		// If some products were returned by LIST call, then generate product line items for each of them
+		const productComponents = responseData.products ? responseData.products.map(item => {	
+			return ProductLine(item);
+		}) : [];
+		
+		// Render the list of product line items
+		productComponents.forEach(productComponent => {
+			shopDataContainer.appendChild(productComponent)
+		});
+
+		// Create the container for the payment total
+		const paymentTotalContainer = PaymentTotalContainer(responseData);
+
+		shopDataContainer.appendChild(paymentTotalContainer)
+
+		return shopDataContainer;
+	}
+
+	// Create a shop data title
+	function ShopDataTitle(titleText) {
+		const shopDataTitle = document.createElement("h2");
+		shopDataTitle.innerHTML = titleText;
+		return shopDataTitle;
+	}
+
+	function OrderReference(label, referenceText) {
+		const orderReference = document.createElement("div");
+		orderReference.setAttribute("class", "order-reference");
+		orderReference.innerHTML = label + ": " + "<b>" + referenceText + "</b>";
+		return orderReference;
+	}
+
+	// Generates an entire product line including product image (if exists, product name, and price and quantity information)
+	function ProductLine (productData) {
+		const productLine = document.createElement("div");
+		productLine.setAttribute("class", "product-line");
+		const productImageContainer = ProductImageContainer(productData);
+		const productDataContainer = ProductDataContainer(productData);
+		productLine.appendChild(productImageContainer);
+		productLine.appendChild(productDataContainer);
+		return productLine;
+	}
+
+	// Generates a sized container for the product image
+	function ProductImageContainer (productData) {
+		const productImageContainer = document.createElement("div");
+		productImageContainer.setAttribute("class", "product-image-container");
+		const productImage = ProductImage(productData.productImageUrl);
+		productImageContainer.appendChild(productImage);
+		return productImageContainer;
+	}
+
+	// If there is a product image URL, then function returns the image, otherwise an empty div
+	function ProductImage(url) {
+		const productImage = url ? document.createElement("img") : document.createElement("div");
+		if(url) {
+			productImage.src = url;
+		}
+		productImage.setAttribute("class", "product-image");
+		return productImage;
+	}
+
+	// Component for displaying product name, quantity and amount
+	function ProductDataContainer(productData) {
+		const productDataContainer = document.createElement("div");
+		productDataContainer.setAttribute("class", "product-data-container");
+
+		const productName = ProductName(productData.name);
+		productDataContainer.appendChild(productName)
+
+		const productAmountContainer = ProductAmountContainer(productData);
+
+		productDataContainer.appendChild(productAmountContainer);
+
+		return productDataContainer;
+	}
+
+	// Inserts a product name if one exists or a placeholder if not
+	function ProductName(nameText) {
+		const productName = document.createElement("div");
+		productName.setAttribute("class", "product-name-container");
+		productName.innerHTML = nameText ? nameText : "-";
+		return productName;
+	}
+
+
+	// 
+	function ProductAmountContainer(productData) {
+		const productAmountContainer = document.createElement("div");
+		productAmountContainer.setAttribute("class", "product-amount-container");
+
+		const productQuantityLabel = ProductQuantityLabel(productData.quantity);
+
+		const productCostLabel = ProductCostLabel(productData.amount, productData.currency);
+
+		productAmountContainer.appendChild(productQuantityLabel);
+		productAmountContainer.appendChild(productCostLabel);
+
+		return productAmountContainer;
+	}
+
+	function ProductQuantityLabel (productQuantity) {
+		const productQuantityLabel = document.createElement("div");
+		productQuantityLabel.innerHTML = productQuantity ? ("Menge: " + productQuantity) : "";
+		return productQuantityLabel;
+	}
+
+	function ProductCostLabel(productAmount, productCurrency) {
+		const productCostLabel = document.createElement("div");
+
+		if ((productAmount || productAmount === 0) && productCurrency) {
+			productCostLabel.innerHTML = "Gesamt: " + productAmount + " " + productCurrency;
+		}
+		else if (productAmount || productAmount === 0) {
+			productCostLabel.innerHTML = "Gesamt: " + productAmount + " -"
+		}
+		else if (productCurrency) {
+			productCostLabel.innerHTML = "Gesamt: - " + productCurrency
+		}
+		else {
+			productCostLabel.innerHTML = "-";
+		}
+		return productCostLabel;
+	}
+
+	function PaymentTotalContainer (responseData) {
+		const paymentTotalContainer = document.createElement("div");
+		paymentTotalContainer.setAttribute("class", "payment-total-container");
+
+		const paymentTotalLabel = PaymentTotalLabel("Bestellsumme:");
+
+		const paymentTotalAmount = PaymentTotalAmount(responseData);
+
+		paymentTotalContainer.appendChild(paymentTotalLabel)
+		paymentTotalContainer.appendChild(paymentTotalAmount)
+
+		return paymentTotalContainer;
+	}
+
+	function PaymentTotalLabel (labelText) {
+		const paymentTotalLabel = document.createElement("h3");
+		paymentTotalLabel.setAttribute("class", "payment-total-label");
+		paymentTotalLabel.innerHTML = labelText;
+		return paymentTotalLabel;
+	}
+
+
+	function PaymentTotalAmount (responseData) {
+		const paymentTotalAmount = document.createElement("div");
+		paymentTotalAmount.setAttribute("class", "payment-total-amount");
+		
+		const currencyCodeElement = document.createElement("div");
+		currencyCodeElement.setAttribute("class", "payment-total-currency");
+		currencyCodeElement.innerHTML = responseData?.payment?.currency ? responseData?.payment?.currency : "-";
+
+		const paymentCurrencyAmount = document.createElement("div");
+		paymentCurrencyAmount.innerHTML = responseData?.payment?.amount ? responseData?.payment?.amount : "-";
+
+		paymentTotalAmount.appendChild(currencyCodeElement);
+		paymentTotalAmount.appendChild(paymentCurrencyAmount);
+
+		return paymentTotalAmount;
+	}
+
+	/*
+		Payment methods component	
+	*/
+
+	function PaymentIframeContainer (responseData) {
+		// Generate an iframe container
+		const iFrameContainer = document.createElement("div")
+		iFrameContainer.setAttribute("id", "iframe-container");
+
+		// Create iframe title
+		const iFrameTitle = PaymentIframeTitle("Zahlungsart");
+
+		iFrameContainer.appendChild(iFrameTitle)
+
+		// Loading message while custom CSS loading
+
+		const loadingPaymentMethods = LoadingPaymentMethodsMessage("Loading payment methods...");
+
+		iFrameContainer.appendChild(loadingPaymentMethods);
+
+		// Load the payment methods list into iFrame
+		const iframe = document.createElement("iframe");
+
+		// Build the URL for requesting hosted payment page
+		const hppURL = cssLink 
+		? `https://resources.integration.oscato.com/paymentpage/v3/responsive.html?listId=${listId}&liveValidation=true&smartSwitch=true&cssUrl=${cssLink}`
+		: `https://resources.integration.oscato.com/paymentpage/v3/responsive.html?listId=${listId}&liveValidation=true&smartSwitch=true`;
+		
+		iframe.src = hppURL;
+
+		iFrameContainer.appendChild(iframe)
+
+		iframe.setAttribute("class", "hidden");
+
+		iframe.onload= () => {
+			iframe.removeAttribute("class", "hidden");
+			iFrameContainer.removeChild(loadingPaymentMethods);
+		}
+
+		return iFrameContainer;
+	}
+
+	function PaymentIframeTitle (titleText) {
+		// Create iframe title
+		const iFrameTitle = document.createElement("h2");
+		iFrameTitle.innerHTML = titleText;
+		return iFrameTitle
+	}
+
+	function LoadingPaymentMethodsMessage(text) {
+		const loadingPaymentMethods = document.createElement("div");
+		loadingPaymentMethods.innerHTML= text;
+		loadingPaymentMethods.setAttribute("id", "loading-message");
+		return loadingPaymentMethods;
+	}
+
+</script>
+
+<style type="text/css">
+	body {
+		width: 100vw;
+		min-height: 100vh;
+		margin: 0px;
+		font-family: 'Open Sans', sans-serif;
+		display: flex;
+		flex-direction: column;
+	}
+
+	header {
+		min-height: 60px;
+		display: flex;
+		background-color: #252525;
+		color: white;
+		text-align: center;
+		align-items: center;
+		justify-content: space-around;
+		padding-left: 5%;
+		padding-right: 5%;
+		box-sizing: border-box;
+		transition: background-color 0.25s ease;
+		position: relative;
+	}
+
+	.logo-container {
+		position: absolute;
+		width: 100%;
+		box-sizing: border-box;
+		height: 60px;
+		z-index: 10;
+		display: flex;
+		justify-content: flex-start;
+		align-items: center;
+		padding-left: 5%;
+		padding-right: 5%;
+	}
+
+	.shop-logo {
+		height: 30px;
+		width: 150px;
+		background-size: contain;
+		background-repeat: no-repeat;
+	}
+
+	h2 {
+		margin-top: 10px;
+		margin-bottom: 10px;
+		font-weight: 300;
+		text-transform: uppercase;
+	}
+
+	main {
+		background-image: linear-gradient(lightgray, white);
+		flex: 1;
+		display: flex;
+		height: auto;
+		justify-content: center;
+		padding-left: 5%;
+		padding-right: 5%;
+		box-sizing: border-box;
+		flex-wrap: wrap;
+	}
+
+	#shop-data-container {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		box-sizing: border-box;
+		padding: 40px;
+		border: 1px solid gray;
+		margin: 20px;
+		background-color: white;
+		box-shadow: 1px 6px 11px -2px rgba(122,122,122,1);
+		text-align: center;
+		min-width: 400px;
+		max-width: 600px;
+	}
+
+	.order-reference {
+		margin-top: 10px;
+		margin-bottom: 10px;
+	}
+
+	.product-line {
+		width: 100%;
+		padding-top: 15px;
+		padding-bottom: 15px;
+		box-sizing: border-box;
+		border-bottom: 1px solid lightgray;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.product-image-container {
+		width: 50px;
+	}
+
+	.product-image {
+		width: 100%;
+	}
+
+	.product-data-container {
+		padding-left: 10%;
+		box-sizing: border-box;
+		flex: 1;
+	}
+
+	.product-name-container {
+		color: #454545;
+		text-align: left;
+		font-weight: bold;
+	}
+
+	.product-amount-container {
+		margin-top: 15px;
+		display: flex;
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+
+	.payment-total-container {
+		min-height: 50px;
+		width: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		padding-top: 10px;
+		flex-wrap: wrap;
+		color: #454545;
+	}
+
+	.payment-total-amount {
+		font-style: bold;
+		display: flex;
+		font-size: 1.5em;
+	}
+
+	.payment-total-currency {
+		margin-left: 10px;
+		margin-right: 10px;
+	}
+
+	#iframe-container {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 40px;
+		border: 1px solid gray;
+		margin: 20px;
+		background-color: white;
+		box-shadow: 1px 6px 11px -2px rgba(122,122,122,1);
+		text-align: center;
+		min-height: 600px;
+		box-sizing: border-box;
+		min-width: 400px;
+		max-width: 600px;
+	}
+
+	iframe {
+		border-style: none !important;
+		flex: 1;
+		width: 100%;
+	}
+
+	iframe.hidden {
+		display: none;
+	}
+
+	footer {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding-top: 5px;
+		padding-bottom: 5px;
+		background-color: #252525;
+		color: white;
+		padding-left: 5%;
+		padding-right: 5%;
+	}
+
+	.logo {
+		height: 40px;
+		margin-left: 15px;
+	}
+
+	.error-message {
+		flex: 1;
+		justify-content: center;
+		align-items: center;
+		display: flex;
+		color: red;
+		text-align: center;
+	}
+
+	@media only screen and (max-width: 700px) {
+	  .logo-container {
+	  	display: none;
+	  }
+	}
+
+	@media only screen and (max-width: 450px) {
+
+	  #shop-data-container {
+	  	margin: 5px;
+	  	min-width: 200px;
+	  	padding: 20px;
+	  }
+
+	  #iframe-container {
+	  	margin-left: 5px;
+	  	margin-right: 5px;
+	  	margin-top: 10px;
+	  	margin-bottom: 10px;
+	  	min-width: 200px;
+	  	padding: 20px;
+	  }
+
+	  .payment-total-container {
+	  	justify-content: center;
+	  }
+
+	  main {
+	  	padding-left: 2%;
+	  	padding-right: 2%;
+	  }
+	}
+
+</style>
+
+</html>

@@ -1,0 +1,26 @@
+
+
+.submit-button {
+		background: #2056B1 !important;
+		width: 100%  !important;
+		background-image: none  !important;
+		min-height: 45px  !important;
+}
+
+header {
+	background: linear-gradient(to right, #2056B1 0%, #FC5EA9 100%) !important;
+	color: white  !important;
+}
+
+
+.shop-logo {
+	background-image: url("payoneer_logo.png")  !important;
+}
+
+#shop-title {
+	color: white  !important;
+}
+
+.payment-total-container {
+	color: #2056B1 !important;
+}
